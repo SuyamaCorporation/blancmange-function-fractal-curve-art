@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ブランマンジェ関数 無限和フラクタル曲線</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #0d0d12; color: #e8e8ff; font-family: 'Segoe UI', sans-serif; }
+  canvas { display: block; }
+  input[type=range] { accent-color: #d4af37; width: 100%; }
+  .panel { background: #13131f; border: 1px solid #2a2a3e; border-radius: 8px; }
+</style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-6 px-4">
+  <h1 class="text-2xl font-bold mb-1 text-yellow-300">ブランマンジェ関数 無限和フラクタル曲線</h1>
+  <p class="text-sm text-yellow-500 mb-4">テント関数の無限和で定義される「どこでも微分不可能」な連続関数</p>
+
+  <div class="flex flex-col lg:flex-row gap-6 w-full max-w-5xl">
+    <!-- Main canvas -->
+    <div class="flex flex-col items-center gap-3">
+      <canvas id="mainCanvas" width="600" height="400" class="rounded-lg shadow-lg border border-yellow-900"></canvas>
+      <div class="flex gap-3">
+        <button id="animBtn" class="px-4 py-2 bg-yellow-700 hover:bg-yellow-600 rounded text-white text-sm font-semibold transition">アニメーション再生</button>
+        <button id="downloadBtn" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm font-semibold transition">PNG 保存</button>
+      </div>
+    </div>
+
+    <!-- Controls + Info -->
+    <div class="flex flex-col gap-4 w-full lg:w-72">
+      <div class="panel p-4">
+        <h2 class="text-base font-semibold text-yellow-200 border-b border-yellow-900 pb-2 mb-3">パラメーター</h2>
+        <div class="mb-4">
+          <label class="block text-sm mb-1 text-yellow-300">部分和の項数 N = <span id="nVal">8</span></label>
+          <input type="range" id="sliderN" min="1" max="15" step="1" value="8">
+        </div>
+        <div class="mb-2">
+          <label class="block text-sm mb-1 text-yellow-300">アニメーション速度</label>
+          <input type="range" id="sliderSpeed" min="1" max="10" step="1" value="3">
+        </div>
+      </div>
+
+      <!-- Mini partial sum canvas -->
+      <div class="panel p-3">
+        <div class="text-xs text-yellow-400 font-semibold mb-1">部分和の収束過程</div>
+        <canvas id="miniCanvas" width="240" height="120" class="rounded w-full border border-yellow-900 opacity-80"></canvas>
+      </div>
+
+      <div class="panel p-4 text-xs text-yellow-400 leading-relaxed">
+        <div class="font-semibold text-yellow-300 mb-2 text-sm">フラクタル解説</div>
+        <p class="mb-2"><strong class="text-yellow-200">ブランマンジェ関数（高木関数）</strong></p>
+        <p class="mb-1">Blanc(x) = Σ s(2ⁿ·x) / 2ⁿ</p>
+        <p class="mb-2 text-xs">ここで s(x) = min(x-⌊x⌋, 1-(x-⌊x⌋)) はテント関数</p>
+        <p class="mb-2">• <span class="text-white">フラクタル次元</span>：1.5</p>
+        <p class="mb-2">• <span class="text-white">連続性</span>：全点で連続</p>
+        <p class="mb-2">• <span class="text-white">微分可能性</span>：どこでも微分不可能（ヴァイエルシュトラス型）</p>
+        <p>• <span class="text-white">自己相似</span>：任意のスケールで自己相似構造をもつ</p>
+      </div>
+    </div>
+  </div>
+
+<script>
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+const mini = document.getElementById('miniCanvas');
+const mctx = mini.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const POINTS = 1000;
+
+let N = 8, animN = 0, animating = false, animTimer = null;
+let speedVal = 3;
+
+function tent(x) {
+  const frac = x - Math.floor(x);
+  return Math.min(frac, 1 - frac);
+}
+
+function blancmange(x, terms) {
+  let sum = 0;
+  for (let n = 0; n < terms; n++) {
+    sum += tent(Math.pow(2, n) * x) / Math.pow(2, n);
+  }
+  return sum;
+}
+
+function drawMain(terms) {
+  ctx.fillStyle = '#0d0d12';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  ctx.strokeStyle = '#1a1a2e';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 10; i++) {
+    const x = 40 + (i / 10) * (W - 60);
+    ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(x, H - 40); ctx.stroke();
+  }
+  for (let i = 0; i <= 5; i++) {
+    const y = 20 + (i / 5) * (H - 60);
+    ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(W - 20, y); ctx.stroke();
+  }
+
+  // Axes
+  ctx.strokeStyle = '#3a3a5e';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(40, H - 40); ctx.lineTo(W - 20, H - 40); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(40, 20); ctx.lineTo(40, H - 40); ctx.stroke();
+
+  // Axis labels
+  ctx.fillStyle = '#6666aa';
+  ctx.font = '11px monospace';
+  ctx.fillText('0', 32, H - 28);
+  ctx.fillText('1', W - 24, H - 28);
+  ctx.fillText('0.5', 36, 16);
+
+  // Draw partial sums from n=1 to terms (overlapping)
+  for (let t = 1; t <= terms; t++) {
+    const alpha = t === terms ? 1.0 : 0.15 + (t / terms) * 0.3;
+    const hue = 40 + (t / 15) * 30;
+    ctx.strokeStyle = t === terms ? `hsla(${hue}, 90%, 65%, ${alpha})` : `hsla(200, 60%, 60%, ${alpha})`;
+    ctx.lineWidth = t === terms ? 2.5 : 1;
+    ctx.beginPath();
+    for (let i = 0; i <= POINTS; i++) {
+      const x = i / POINTS;
+      const y = blancmange(x, t);
+      const px = 40 + x * (W - 60);
+      const py = (H - 40) - y * (H - 60);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+
+  // Label
+  ctx.fillStyle = '#d4af37';
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillText(`N = ${terms} 項の部分和`, 50, 45);
+  ctx.fillStyle = '#8888aa';
+  ctx.font = '11px sans-serif';
+  ctx.fillText('Blanc(x) = Σ s(2ⁿ·x) / 2ⁿ', 50, 62);
+}
+
+function drawMini() {
+  mctx.fillStyle = '#0d0d12';
+  mctx.fillRect(0, 0, 240, 120);
+  const mW = 240, mH = 120;
+
+  for (let t = 1; t <= N; t++) {
+    const hue = 200 + (t / N) * 100;
+    mctx.strokeStyle = t === N ? '#d4af37' : `hsla(${hue}, 70%, 55%, 0.5)`;
+    mctx.lineWidth = t === N ? 2 : 1;
+    mctx.beginPath();
+    for (let i = 0; i <= 300; i++) {
+      const x = i / 300;
+      const y = blancmange(x, t);
+      const px = x * mW;
+      const py = mH - 10 - y * (mH - 20);
+      if (i === 0) mctx.moveTo(px, py); else mctx.lineTo(px, py);
+    }
+    mctx.stroke();
+  }
+}
+
+function render(terms) {
+  drawMain(terms);
+  drawMini();
+}
+
+document.getElementById('sliderN').addEventListener('input', e => {
+  N = parseInt(e.target.value);
+  document.getElementById('nVal').textContent = N;
+  animN = 0;
+  if (!animating) render(N);
+});
+
+document.getElementById('sliderSpeed').addEventListener('input', e => {
+  speedVal = parseInt(e.target.value);
+});
+
+document.getElementById('animBtn').addEventListener('click', () => {
+  if (animating) {
+    animating = false;
+    clearTimeout(animTimer);
+    document.getElementById('animBtn').textContent = 'アニメーション再生';
+    return;
+  }
+  animating = true;
+  animN = 1;
+  document.getElementById('animBtn').textContent = '停止';
+  function step() {
+    if (!animating) return;
+    render(animN);
+    document.getElementById('nVal').textContent = animN;
+    document.getElementById('sliderN').value = animN;
+    if (animN < N) {
+      animN++;
+      animTimer = setTimeout(step, 1000 / speedVal);
+    } else {
+      animating = false;
+      document.getElementById('animBtn').textContent = 'アニメーション再生';
+    }
+  }
+  step();
+});
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = `blancmange_N${N}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+render(N);
+</script>
+</body>
+</html>
